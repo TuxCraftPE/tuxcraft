@@ -1,0 +1,246 @@
+name: Build TuxCraft
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm_cache
+
+jobs:
+  build-linux:
+    name: Build Linux (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build ccache \
+            libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libasound2-dev libpulse-dev
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-linux-${{ github.sha }}
+          restore-keys: ccache-linux-
+
+      - name: Restore CPM source cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/cpm_cache
+          key: cpm-linux-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: cpm-linux-
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_INSTALL_RPATH='$ORIGIN' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=TRUE
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp build/TuxCraft dist/
+          find build/_deps -name "*.so*" ! -type d -exec cp -a {} dist/ \;
+          cp -r data dist/
+          cp -f icon.png options.txt dist/ 2>/dev/null || true
+          printf '#!/bin/sh\nDIR="$(cd "$(dirname "$0")" && pwd)"\nexport LD_LIBRARY_PATH="$DIR:$LD_LIBRARY_PATH"\nexec "$DIR/TuxCraft" "$@"\n' > dist/run.sh
+          chmod +x dist/run.sh dist/TuxCraft
+          tar -czvf TuxCraft-Linux-x86_64.tar.gz -C dist .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TuxCraft-Linux-x86_64
+          path: TuxCraft-Linux-x86_64.tar.gz
+          retention-days: 14
+
+  build-windows:
+    name: Build Windows (x86_64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          cache: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-ccache
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: C:\Users\runneradmin\.ccache
+          key: ccache-windows-${{ github.sha }}
+          restore-keys: ccache-windows-
+
+      - name: Restore CPM source cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/cpm_cache
+          key: cpm-windows-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: cpm-windows-
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build -j$(nproc)
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp build/TuxCraft.exe dist/
+          find build -name "*.dll" -exec cp {} dist/ \;
+          cp /mingw64/bin/libwinpthread-1.dll \
+             /mingw64/bin/libstdc++-6.dll \
+             /mingw64/bin/libgcc_s_seh-1.dll dist/ 2>/dev/null || true
+          cp -r data dist/
+          cp -f icon.png options.txt dist/ 2>/dev/null || true
+          (cd dist && cmake -E tar cf ../TuxCraft-Windows-x86_64.zip --format=zip .)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TuxCraft-Windows-x86_64
+          path: TuxCraft-Windows-x86_64.zip
+          retention-days: 14
+
+  build-macos:
+    name: Build macOS (arm64)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: brew install ninja ccache
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-macos-${{ github.sha }}
+          restore-keys: ccache-macos-
+
+      - name: Restore CPM source cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/cpm_cache
+          key: cpm-macos-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: cpm-macos-
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_INSTALL_RPATH="@loader_path" \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=TRUE
+
+      - name: Build
+        run: cmake --build build -j$(sysctl -n hw.ncpu)
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp build/TuxCraft dist/
+          find build/_deps -name "*.dylib" ! -type l -exec cp {} dist/ \;
+          find build/_deps -name "*.dylib.*" ! -type l -exec cp {} dist/ \;
+          cp -r data dist/
+          cp -f icon.png options.txt dist/ 2>/dev/null || true
+          printf '#!/bin/sh\nDIR="$(cd "$(dirname "$0")" && pwd)"\nexport DYLD_LIBRARY_PATH="$DIR:$DYLD_LIBRARY_PATH"\nexec "$DIR/TuxCraft" "$@"\n' > dist/run.sh
+          chmod +x dist/run.sh dist/TuxCraft
+          tar -czvf TuxCraft-macOS-arm64.tar.gz -C dist .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TuxCraft-macOS-arm64
+          path: TuxCraft-macOS-arm64.tar.gz
+          retention-days: 14
+
+  build-android:
+    name: Build Android APK (arm64-v8a)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Locate pre-installed NDK
+        id: find-ndk
+        shell: pwsh
+        run: |
+          $sdkRoot = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT }
+                     elseif ($env:ANDROID_HOME) { $env:ANDROID_HOME }
+                     else { "C:\Android\android-sdk" }
+          $ndkDir = Join-Path $sdkRoot "ndk"
+          $latest = Get-ChildItem $ndkDir -Directory |
+                    Sort-Object Name -Descending |
+                    Select-Object -First 1 -ExpandProperty FullName
+          if (-not $latest) { throw "No NDK found under $ndkDir" }
+          Write-Host "Using NDK: $latest"
+          "NDK_PATH=$latest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Build Android APK
+        shell: pwsh
+        env:
+          ANDROID_NDK_HOME: ${{ steps.find-ndk.outputs.NDK_PATH }}
+          ANDROID_NDK_ROOT: ${{ steps.find-ndk.outputs.NDK_PATH }}
+          ANDROID_NDK:      ${{ steps.find-ndk.outputs.NDK_PATH }}
+        run: .\build.ps1 -NoInstall
+
+      - name: Collect APK
+        shell: pwsh
+        run: |
+          $sdkRoot = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { "C:\Android\android-sdk" }
+          $dirs = @("C:\apkbuild", "$env:GITHUB_WORKSPACE\build-apk")
+          $apk = $dirs | ForEach-Object {
+            if (Test-Path $_) { Get-ChildItem $_ -Recurse -Filter "*debug.apk" | Select-Object -First 1 }
+          } | Select-Object -First 1
+          if (-not $apk) {
+            $apk = $dirs | ForEach-Object {
+              if (Test-Path $_) { Get-ChildItem $_ -Recurse -Filter "*.apk" | Select-Object -First 1 }
+            } | Select-Object -First 1
+          }
+          if (-not $apk) { throw "APK not found! Build may have failed." }
+          Write-Host "APK: $($apk.FullName)"
+          Copy-Item $apk.FullName "TuxCraft-Android.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TuxCraft-Android-APK
+          path: TuxCraft-Android.apk
+          retention-days: 14
