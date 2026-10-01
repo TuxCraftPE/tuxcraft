@@ -3,13 +3,14 @@
 
 #include "Monster.h"
 #include "TuxAssets.h"
-#if !defined(ANDROID)
+#if !defined(ANDROID) && !defined(__ANDROID__)
 #include <AL/al.h>
 #else
 typedef unsigned int ALuint;
 #endif
 
 class Level;
+class CompoundTag;
 
 class Tux : public Monster {
     typedef Monster super;
@@ -31,11 +32,21 @@ public:
     virtual bool removeWhenFarAway() { return false; }
 
     virtual void updateAi();
+    virtual void travel(float xa, float ya);
 
     bool isHoldingFlower() const { return heldFlowerId != 0; }
     int getHeldFlowerId() const { return heldFlowerId; }
     void setHoldingFlower(int flowerId) { heldFlowerId = flowerId; }
     void setHoldingFlower(bool holding) { heldFlowerId = holding ? 37 : 0; }
+    float getModelScale() const { return tuxScale; }
+    bool isHoldingSword() const { return holdingSword; }
+    void setHoldingSword(bool holding) { holdingSword = holding; }
+    bool isLeftHanded() const { return leftHanded; }
+    void setLeftHanded(bool left) { leftHanded = left; }
+    void alertAttack(Entity* target);
+
+    virtual void addAdditonalSaveData(CompoundTag* tag);
+    virtual void readAdditionalSaveData(CompoundTag* tag);
 
     void playSound(TuxSoundId soundId, bool interrupt = false);
     bool isAudioPlaying();
@@ -44,6 +55,12 @@ public:
 
 protected:
     ALuint alSource;
+    int soundTicksRemaining;
+    void* slPlayer;
+    void* slPlay;
+    void* slBufferQueue;
+    void* slVolume;
+    uint32_t slCurrentRate;
     int heldFlowerId;
     int idleSoundTimer;
     int splashCooldown;
@@ -51,6 +68,22 @@ protected:
     int lastIdleSound;
     int lastPickupMelody;
     int lastSoundId;
+    int playerStareDuration;
+    int disdainLookTimer;
+    int disdainCooldown;
+    int admireTimer;
+    int admireCooldown;
+    int admireTargetX;
+    int admireTargetY;
+    int admireTargetZ;
+    bool admiringHeldFlower;
+    float tuxScale;
+    bool holdingSword;
+    int attackCooldown;
+    int pendingDropFlowerId;
+    bool leftHanded;
+    int mutualAdmireTimer;
+    int mutualAdmireCooldown;
 };
 
 #endif

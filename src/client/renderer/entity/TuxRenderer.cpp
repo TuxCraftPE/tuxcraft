@@ -83,6 +83,7 @@ void TuxRenderer::render(Entity* entity, float x, float y, float z, float rot, f
     if (vertexCount == 0 || !baseVertices) return;
 
     Tux* tux = (Tux*)entity;
+    shadowRadius = 0.5f * tux->getModelScale();
     tux->updateAudio(x, y, z);
 
     float bodyRot = tux->yBodyRotO + (tux->yBodyRot - tux->yBodyRotO) * a;
@@ -98,6 +99,8 @@ void TuxRenderer::render(Entity* entity, float x, float y, float z, float rot, f
     float walkCycle = wp * 1.8f;
 
     bool holdingFlower = tux->isHoldingFlower();
+    bool holdingSword = tux->isHoldingSword();
+    bool leftHanded = tux->isLeftHanded();
     bool isTalking = tux->isAudioPlaying();
     float timeAnim = (tux->tickCount + a) * 0.08f;
     float mouthPitch = isTalking ? std::abs(std::sin((tux->tickCount + a) * 0.70f)) * 6.5f * Mth::DEGRAD : 0.0f;
@@ -145,7 +148,16 @@ void TuxRenderer::render(Entity* entity, float x, float y, float z, float rot, f
             } else if (part == 1) {
                 float rx, ry, rz;
                 float w_blend = smoothstep(0.18f, 0.26f, -vx) * (1.0f - smoothstep(0.78f, 0.88f, vy));
-                if (holdingFlower) {
+                if (holdingSword && leftHanded) {
+                    rotatePoint(vx - (-0.26f), vy - 0.72f, vz - 0.0f, -1.05f, 0.20f, 0.15f, rx, ry, rz);
+                    float t = std::max(0.0f, std::min(1.0f, (0.72f - vy) / 0.38f));
+                    rx += 0.04f * t;
+                    ry += 0.02f * t;
+                    rz += 0.08f * t;
+                    px = vx + (rx + (-0.26f) - vx) * w_blend;
+                    py = vy + (ry + 0.72f - vy) * w_blend;
+                    pz = vz + (rz + 0.0f - vz) * w_blend;
+                } else if (holdingFlower && !holdingSword) {
                     rotatePoint(vx - (-0.26f), vy - 0.80f, vz - 0.0f, -1.05f, 0.50f, 0.30f, rx, ry, rz);
                     float t = std::max(0.0f, std::min(1.0f, (0.80f - vy) / 0.38f));
                     rx += 0.12f * t;
@@ -163,7 +175,16 @@ void TuxRenderer::render(Entity* entity, float x, float y, float z, float rot, f
             } else if (part == 2) {
                 float rx, ry, rz;
                 float w_blend = smoothstep(0.18f, 0.26f, vx) * (1.0f - smoothstep(0.78f, 0.88f, vy));
-                if (holdingFlower) {
+                if (holdingSword && !leftHanded) {
+                    rotatePoint(vx - 0.26f, vy - 0.72f, vz - 0.0f, -1.05f, -0.20f, -0.15f, rx, ry, rz);
+                    float t = std::max(0.0f, std::min(1.0f, (0.72f - vy) / 0.38f));
+                    rx -= 0.04f * t;
+                    ry += 0.02f * t;
+                    rz += 0.08f * t;
+                    px = vx + (rx + 0.26f - vx) * w_blend;
+                    py = vy + (ry + 0.72f - vy) * w_blend;
+                    pz = vz + (rz + 0.0f - vz) * w_blend;
+                } else if (holdingFlower && !holdingSword) {
                     rotatePoint(vx - 0.26f, vy - 0.80f, vz - 0.0f, -1.05f, -0.50f, -0.30f, rx, ry, rz);
                     float t = std::max(0.0f, std::min(1.0f, (0.80f - vy) / 0.38f));
                     rx -= 0.12f * t;
@@ -226,6 +247,8 @@ void TuxRenderer::render(Entity* entity, float x, float y, float z, float rot, f
     glRotatef2(-bodyRot, 0.0f, 1.0f, 0.0f);
     glTranslatef2(waddleSway, 0.0f, 0.0f);
     glRotatef2(waddleRoll, 0.0f, 0.0f, 1.0f);
+    float scale = tux->getModelScale();
+    glScalef2(scale, scale, scale);
 
     float br = entity->getBrightness(a);
     glColor4f2(br, br, br, 1.0f);
@@ -251,6 +274,71 @@ void TuxRenderer::render(Entity* entity, float x, float y, float z, float rot, f
         glDisableClientState2(GL_VERTEX_ARRAY);
     }
 
+    if (tux->isHoldingSword()) {
+        bindTexture("gui/items.png");
+        glPushMatrix2();
+        bool leftHand = tux->isLeftHanded();
+        float handX = leftHand ? -0.22f : 0.22f;
+        float handY = 0.56f;
+        float handZ = 0.38f;
+
+        glTranslatef2(handX, handY, handZ);
+        glScalef2(0.70f, 0.70f, 0.70f);
+        if (!leftHand) {
+            glRotatef2(-18.0f, 0.0f, 1.0f, 0.0f);
+            glRotatef2(38.0f, 1.0f, 0.0f, 0.0f);
+            glRotatef2(-18.0f, 0.0f, 0.0f, 1.0f);
+        } else {
+            glRotatef2(18.0f, 0.0f, 1.0f, 0.0f);
+            glRotatef2(38.0f, 1.0f, 0.0f, 0.0f);
+            glRotatef2(18.0f, 0.0f, 0.0f, 1.0f);
+            glScalef2(-1.0f, 1.0f, 1.0f);
+        }
+        glTranslatef2(-0.16f, -0.16f, 0.0f);
+
+        float u0 = (2 * 16 + 0.00f) / 256.0f;
+        float u1 = (2 * 16 + 15.99f) / 256.0f;
+        float v0 = (4 * 16 + 0.00f) / 256.0f;
+        float v1 = (4 * 16 + 15.99f) / 256.0f;
+
+        const float zOff = 0.015f;
+        const float sVerts[36] = {
+            0.0f, 0.0f,  zOff,   1.0f, 0.0f,  zOff,   1.0f, 1.0f,  zOff,
+            0.0f, 0.0f,  zOff,   1.0f, 1.0f,  zOff,   0.0f, 1.0f,  zOff,
+
+            1.0f, 0.0f, -zOff,   0.0f, 0.0f, -zOff,   0.0f, 1.0f, -zOff,
+            1.0f, 0.0f, -zOff,   0.0f, 1.0f, -zOff,   1.0f, 1.0f, -zOff
+        };
+
+        const float sUVs[24] = {
+            u0, v1,   u1, v1,   u1, v0,
+            u0, v1,   u1, v0,   u0, v0,
+
+            u1, v1,   u0, v1,   u0, v0,
+            u1, v1,   u0, v0,   u1, v0
+        };
+
+        glBindBuffer2(GL_ARRAY_BUFFER, 0);
+        glEnable2(GL_ALPHA_TEST);
+        glAlphaFunc(GL_GREATER, 0.1f);
+        glDisable2(GL_CULL_FACE);
+
+        glColor4f2(br, br, br, 1.0f);
+        glEnableClientState2(GL_VERTEX_ARRAY);
+        glEnableClientState2(GL_TEXTURE_COORD_ARRAY);
+        glDisableClientState2(GL_COLOR_ARRAY);
+
+        glVertexPointer2(3, GL_FLOAT, 0, sVerts);
+        glTexCoordPointer2(2, GL_FLOAT, 0, sUVs);
+        glDrawArrays2(GL_TRIANGLES, 0, 12);
+
+        glDisableClientState2(GL_TEXTURE_COORD_ARRAY);
+        glDisableClientState2(GL_VERTEX_ARRAY);
+        bindTexture("mob/tux.png");
+
+        glPopMatrix2();
+    }
+
     int flowerId = tux->getHeldFlowerId();
     if (flowerId == 0 && tux->isHoldingFlower()) {
         flowerId = Tile::flower ? Tile::flower->id : 37;
@@ -265,10 +353,10 @@ void TuxRenderer::render(Entity* entity, float x, float y, float z, float rot, f
         flowerTile = Tile::tiles[flowerId];
     }
 
-    if (flowerTile) {
+    if (flowerTile && !tux->isHoldingSword()) {
         bindTexture("terrain.png");
         glPushMatrix2();
-        glTranslatef2(0.0f, 0.68f, 0.55f);
+        glTranslatef2(0.0f, 0.68f, 0.58f);
         glScalef2(0.44f, 0.44f, 0.44f);
         glRotatef2(8.0f, 1.0f, 0.0f, 0.0f);
 
@@ -284,34 +372,50 @@ void TuxRenderer::render(Entity* entity, float x, float y, float z, float rot, f
         float y0 = -0.20f;
         float y1 = 0.80f;
 
-        Tesselator& t = Tesselator::instance;
-        t.begin();
-        t.color(br, br, br);
-        t.vertexUV(-w, y1, -w, u0, v0);
-        t.vertexUV(-w, y0, -w, u0, v1);
-        t.vertexUV( w, y0,  w, u1, v1);
-        t.vertexUV( w, y1,  w, u1, v0);
+        const float fVerts[72] = {
+            -w, y1, -w,   -w, y0, -w,    w, y0,  w,
+            -w, y1, -w,    w, y0,  w,    w, y1,  w,
 
-        t.vertexUV( w, y1,  w, u0, v0);
-        t.vertexUV( w, y0,  w, u0, v1);
-        t.vertexUV(-w, y0, -w, u1, v1);
-        t.vertexUV(-w, y1, -w, u1, v0);
+             w, y1,  w,    w, y0,  w,   -w, y0, -w,
+             w, y1,  w,   -w, y0, -w,   -w, y1, -w,
 
-        t.vertexUV(-w, y1,  w, u0, v0);
-        t.vertexUV(-w, y0,  w, u0, v1);
-        t.vertexUV( w, y0, -w, u1, v1);
-        t.vertexUV( w, y1, -w, u1, v0);
+            -w, y1,  w,   -w, y0,  w,    w, y0, -w,
+            -w, y1,  w,    w, y0, -w,    w, y1, -w,
 
-        t.vertexUV( w, y1, -w, u0, v0);
-        t.vertexUV( w, y0, -w, u0, v1);
-        t.vertexUV(-w, y0,  w, u1, v1);
-        t.vertexUV(-w, y1,  w, u1, v0);
-        t.draw();
+             w, y1, -w,    w, y0, -w,   -w, y0,  w,
+             w, y1, -w,   -w, y0,  w,   -w, y1,  w
+        };
 
+        const float fUVs[48] = {
+            u0, v0,  u0, v1,  u1, v1,
+            u0, v0,  u1, v1,  u1, v0,
+
+            u0, v0,  u0, v1,  u1, v1,
+            u0, v0,  u1, v1,  u1, v0,
+
+            u0, v0,  u0, v1,  u1, v1,
+            u0, v0,  u1, v1,  u1, v0,
+
+            u0, v0,  u0, v1,  u1, v1,
+            u0, v0,  u1, v1,  u1, v0
+        };
+
+        glBindBuffer2(GL_ARRAY_BUFFER, 0);
+        glEnable2(GL_ALPHA_TEST);
+        glAlphaFunc(GL_GREATER, 0.1f);
+        glDisable2(GL_CULL_FACE);
+
+        glColor4f2(br, br, br, 1.0f);
+        glEnableClientState2(GL_VERTEX_ARRAY);
+        glEnableClientState2(GL_TEXTURE_COORD_ARRAY);
         glDisableClientState2(GL_COLOR_ARRAY);
+
+        glVertexPointer2(3, GL_FLOAT, 0, fVerts);
+        glTexCoordPointer2(2, GL_FLOAT, 0, fUVs);
+        glDrawArrays2(GL_TRIANGLES, 0, 24);
+
         glDisableClientState2(GL_TEXTURE_COORD_ARRAY);
         glDisableClientState2(GL_VERTEX_ARRAY);
-        glBindBuffer2(GL_ARRAY_BUFFER, 0);
         bindTexture("mob/tux.png");
 
         glPopMatrix2();

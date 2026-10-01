@@ -7,6 +7,12 @@ Fork of https://github.com/mschiller890/mcpe64 that adds Tux to the game.
 <table>
   <tr>
     <td align="center">
+      <img src="screenshots/3.png" width="400" height="400">
+    </td>
+    <td align="center">
+      <img src="screenshots/4.png" width="400" height="400">
+    </td>
+    <td align="center">
       <img src="screenshots/1.png" width="400" height="400">
     </td>
     <td align="center">
